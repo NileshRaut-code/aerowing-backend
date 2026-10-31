@@ -1,0 +1,301 @@
+<title>Tenant Isolation Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: engineering spec — sticky section index on the left, one reading column, diagrams get full column width */
+:root {
+  --bg: #f6f8f8;
+  --surface: #ffffff;
+  --fg: #16201f;
+  --muted: #56686a;
+  --line: #d6dfdf;
+  --accent: #0f6e6a;
+  --accent-soft: #e1f0ee;
+  --ok: #1d7a43;
+  --warn: #9a6200;
+  --bad: #b3261e;
+  --code-bg: #eef3f3;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1615; --surface: #151f1e; --fg: #e3ecea; --muted: #94a8a6; --line: #2a3a38;
+    --accent: #5cc8bf; --accent-soft: #173331; --ok: #5fc98a; --warn: #e3b048; --bad: #f08a80; --code-bg: #1a2726;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1615; --surface: #151f1e; --fg: #e3ecea; --muted: #94a8a6; --line: #2a3a38;
+  --accent: #5cc8bf; --accent-soft: #173331; --ok: #5fc98a; --warn: #e3b048; --bad: #f08a80; --code-bg: #1a2726;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.65 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.shell { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; padding-block: 40px 80px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 13px; }
+nav.toc .label { font: 600 11px/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: s; }
+nav.toc a { display: flex; gap: 10px; padding: 5px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+nav.toc a::before { counter-increment: s; content: counter(s, decimal-leading-zero); font: 500 11px/1.9 var(--font-mono); color: var(--accent); }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--accent-soft); color: var(--fg); outline: none; }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 8px; }
+.eyebrow { font: 500 12px/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; margin-bottom: 14px; }
+h1 { font: 700 clamp(30px, 4.4vw, 44px)/1.08 var(--font-display); letter-spacing: -.01em; margin: 0 0 14px; text-wrap: balance; }
+.lede { max-width: 66ch; color: var(--muted); font-size: 16.5px; margin: 0; }
+.lede strong { color: var(--fg); font-weight: 600; }
+.pillars { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.pill { font: 500 12.5px/1 var(--font-mono); padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+section { padding-top: 44px; scroll-margin-top: 16px; }
+h2 { font: 600 24px/1.2 var(--font-display); margin: 0 0 6px; display: flex; gap: 12px; align-items: baseline; text-wrap: balance; }
+h2 .n { font: 500 13px/1 var(--font-mono); color: var(--accent); }
+.sub { color: var(--muted); margin: 0 0 18px; max-width: 70ch; }
+p, li { max-width: 72ch; }
+code { font: 13px/1.5 var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre.code { font: 12.5px/1.6 var(--font-mono); background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 0; }
+.figure { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; margin: 0 0 16px; }
+.figure pre.mermaid { margin: 0; background: transparent; text-align: center; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 0 0 16px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 11.5px/1.3 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td.num { font: 500 13px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip { display: inline-block; font: 500 11.5px/1 var(--font-mono); padding: 4px 7px; border-radius: 5px; white-space: nowrap; }
+.chip.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.chip.no { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.chip.crit { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.chip.err { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 0 0 16px; }
+.note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 0 0 16px; }
+.note p { margin: 0; }
+.note p + p { margin-top: 6px; }
+ol.steps { padding-left: 20px; display: grid; gap: 6px; }
+.label-sm { font: 600 11.5px/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding-block: 24px 56px; }
+  nav.toc { position: static; margin-bottom: 8px; }
+  nav.toc ol { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Sections">
+    <div class="label">Sections</div>
+    <ol>
+      <li><a href="#deployment">Deployment</a></li>
+      <li><a href="#layers">Code layers</a></li>
+      <li><a href="#pipeline">Request pipeline</a></li>
+      <li><a href="#lifecycle">Tenant lifecycle</a></li>
+      <li><a href="#onboarding">Onboarding flow</a></li>
+      <li><a href="#list">List request</a></li>
+      <li><a href="#isolation">Isolation</a></li>
+      <li><a href="#errors">Error handling</a></li>
+      <li><a href="#alerts">Issue alerts</a></li>
+      <li><a href="#jobs">Batch jobs</a></li>
+      <li><a href="#api">API &amp; roles</a></li>
+      <li><a href="#extend">Adding a feature</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="eyebrow">Aerowing Travel CRM · reference design · Nilesh · 31-10-2026</div>
+      <h1>Tenant isolation architecture</h1>
+      <p class="lede">Each vendor's data stays <strong>isolated and correct</strong>, and developers write as little code as possible to keep it that way. Each vendor runs on its own VM, which carries its tenant id in its environment. All VMs share one MongoDB. One Mongoose plugin scopes every query automatically, so business code never writes a <code>tenantId</code> filter.</p>
+      <div class="pillars">
+        <span class="pill">1 vendor = 1 VM</span>
+        <span class="pill">TENANT_ID from env, never client</span>
+        <span class="pill">single MongoDB</span>
+        <span class="pill">auto-scoping plugin</span>
+        <span class="pill">fail closed</span>
+      </div>
+    </header>
+
+    <section id="deployment">
+      <h2><span class="n">01</span>Deployment view</h2>
+      <p class="sub">There are three layers. The vendor portal and the customer layer share a vendor VM. The AISPL admin portal is a separate platform deployment.</p>
+      <div class="figure"><pre class="mermaid">{{M0}}</pre></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Layer</th><th>Users</th><th>Deployment</th><th>Data it can reach</th></tr></thead>
+        <tbody>
+          <tr><td>Vendor portal</td><td>owner, manager, marketing, support</td><td><code>vendor</code> VM</td><td>its own tenant only</td></tr>
+          <tr><td>Customer</td><td>that vendor's customers</td><td><code>vendor</code> VM, same domain</td><td>its own tenant only</td></tr>
+          <tr><td>AISPL admin</td><td>superadmin, reviewer</td><td><code>platform</code></td><td>control plane only (Tenant, Vendor, Admin). Vendor business data is blocked.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="layers">
+      <h2><span class="n">02</span>Code layers</h2>
+      <p class="sub">Dependencies point downward only. Controllers never write tenant filters, and models never read <code>req</code>.</p>
+      <div class="figure"><pre class="mermaid">{{M1}}</pre></div>
+    </section>
+
+    <section id="pipeline">
+      <h2><span class="n">03</span>Request pipeline (vendor VM)</h2>
+      <p class="sub">Every request passes these gates in order. The first gate that fails sends its error response and the request stops there. 🔔 marks an alert to Slack or mail.</p>
+      <div class="figure"><pre class="mermaid">{{M2}}</pre></div>
+      <div class="note"><p>On the platform deployment, <code>resolveTenant</code> is replaced by <code>platformScope</code>, which opens the scope <code>{ platform: true }</code>. The rest of the chain is the same: <code>requireAdmin</code> and then <code>authorize(…)</code>.</p></div>
+    </section>
+
+    <section id="lifecycle">
+      <h2><span class="n">04</span>Tenant lifecycle</h2>
+      <p class="sub">Every status change is a compare-and-set inside a transaction together with the Vendor update. Two admins clicking at the same time cannot both succeed, and Tenant and Vendor never disagree.</p>
+      <div class="figure"><pre class="mermaid">{{M3}}</pre></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tenant status</th><th>Vendor &amp; customer APIs</th><th>Registration</th></tr></thead>
+        <tbody>
+          <tr><td><code>pending</code></td><td><span class="chip no">403 TENANT_NOT_ACTIVE</span></td><td><span class="chip ok">allowed once, with REGISTRATION_CODE</span></td></tr>
+          <tr><td><code>active</code></td><td><span class="chip ok">open</span></td><td><span class="chip no">409</span></td></tr>
+          <tr><td><code>suspended</code></td><td><span class="chip no">403</span></td><td><span class="chip no">409</span></td></tr>
+          <tr><td><code>rejected</code></td><td><span class="chip no">403</span></td><td><span class="chip no">409</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="onboarding">
+      <h2><span class="n">05</span>Onboarding: register, then approve</h2>
+      <p class="sub">From deployment until AISPL approves the vendor, every vendor and customer API returns <code>403</code>. After approval, the VM unlocks within the tenant cache window (15 s by default).</p>
+      <div class="figure"><pre class="mermaid">{{M4}}</pre></div>
+      <div class="label-sm">Request and responses</div>
+      <pre class="code">POST /api/v1/vendor/register
+{ "registrationCode": "…", "companyName": "ABC Travels", "contactName": "Asha",
+  "email": "ops@abc.com", "phone": "+91 98765 43210",
+  "owner": { "name": "Asha", "email": "asha@abc.com", "password": "••••••••••" } }
+
+201 { "success": true, "message": "Registration submitted for AISPL approval",
+      "data": { "id": "…", "tenantId": "A", "companyName": "ABC Travels", "status": "pending" } }
+
+403 { "success": false, "message": "Tenant is pending; access is blocked",
+      "error": { "code": "TENANT_NOT_ACTIVE" } }</pre>
+    </section>
+
+    <section id="list">
+      <h2><span class="n">06</span>Authenticated request: list users</h2>
+      <p class="sub">Every list endpoint follows the same contract: <code>page</code>, <code>pageSize</code>, <code>search</code>, <code>sortBy</code> and <code>sortOrder</code> in the query, and <code>{ items, pagination }</code> in the response.</p>
+      <div class="figure"><pre class="mermaid">{{M5}}</pre></div>
+      <div class="note"><p>The search text is regex-escaped, <code>sortBy</code> must be on an allowlist, and <code>pageSize</code> is at most 100. <code>_id</code> is the tie-breaker, so ordering is stable. The response returns only the table's DTO fields.</p></div>
+    </section>
+
+    <section id="isolation">
+      <h2><span class="n">07</span>How isolation is enforced</h2>
+      <p class="sub">The tenant plugin is on every tenant-owned model, so there are no manual <code>tenantId</code> filters anywhere in business code.</p>
+      <div class="figure"><pre class="mermaid">{{M6}}</pre></div>
+      <div class="cols">
+        <div>
+          <div class="label-sm">Defence in depth</div>
+          <ol class="steps">
+            <li>Zod rejects any <code>tenantId</code> the client sends.</li>
+            <li>The tenant comes only from the env pin.</li>
+            <li>The JWT audience is bound to <code>tenant:&lt;id&gt;</code>.</li>
+            <li>The plugin filters every DB operation and fails closed.</li>
+            <li>Compound indexes start with <code>tenantId</code>.</li>
+          </ol>
+        </div>
+        <div>
+          <div class="label-sm">Known limits</div>
+          <ol class="steps">
+            <li><code>Model.collection</code> or the raw driver bypasses the plugin. It is forbidden by convention, so add a lint rule for it.</li>
+            <li><code>await</code> queries inside the scope. A query returned un-awaited runs outside the scope and is rejected.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="errors">
+      <h2><span class="n">08</span>Error and case handling</h2>
+      <p class="sub">All errors use one envelope: <code>{ success: false, message, error: { code } }</code>. Stack traces and internal messages never reach the client.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Case</th><th>Status</th><th>Code</th><th>Alert</th></tr></thead>
+        <tbody>
+          <tr><td>Invalid body/query/params, or an unknown key such as <code>tenantId</code></td><td class="num">400</td><td><code>VALIDATION_ERROR</code></td><td></td></tr>
+          <tr><td>Malformed JSON, cast error, Mongoose validation</td><td class="num">400</td><td><code>VALIDATION_ERROR</code></td><td></td></tr>
+          <tr><td>Body over 2 MB</td><td class="num">413</td><td><code>VALIDATION_ERROR</code></td><td></td></tr>
+          <tr><td>No, expired or foreign-tenant JWT, or a disabled user</td><td class="num">401</td><td><code>UNAUTHORIZED</code></td><td></td></tr>
+          <tr><td>Missing permission, foreign Origin, or wrong registration code</td><td class="num">403</td><td><code>FORBIDDEN</code></td><td></td></tr>
+          <tr><td>Tenant pending, suspended or rejected</td><td class="num">403</td><td><code>TENANT_NOT_ACTIVE</code></td><td></td></tr>
+          <tr><td>Record not in this tenant, even if the id exists in another</td><td class="num">404</td><td><code>NOT_FOUND</code></td><td></td></tr>
+          <tr><td>Duplicate email or second registration, or an invalid state transition</td><td class="num">409</td><td><code>CONFLICT</code></td><td></td></tr>
+          <tr><td>Request Host is not the tenant's domain</td><td class="num">421</td><td><code>TENANT_CONTEXT</code></td><td><span class="chip crit">critical</span></td></tr>
+          <tr><td>Rate limit exceeded</td><td class="num">429</td><td><code>RATE_LIMITED</code></td><td></td></tr>
+          <tr><td>Tenant row missing</td><td class="num">503</td><td><code>TENANT_CONTEXT</code></td><td><span class="chip crit">critical</span></td></tr>
+          <tr><td>Isolation violation in code: no scope, platform reaching tenant data, or a blocked op</td><td class="num">500</td><td><code>TENANT_CONTEXT</code></td><td><span class="chip crit">critical</span></td></tr>
+          <tr><td>Any other unhandled error</td><td class="num">500</td><td><code>INTERNAL_ERROR</code></td><td><span class="chip err">error</span></td></tr>
+          <tr><td>Job failed after all retries</td><td class="num">n/a</td><td><code>job.failed</code></td><td><span class="chip err">error</span></td></tr>
+          <tr><td>MongoDB disconnected, uncaught exception or startup failure</td><td class="num">n/a</td><td><code>db.* / process.*</code></td><td><span class="chip crit">critical</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="alerts">
+      <h2><span class="n">09</span>Issue alerts (Slack / mail)</h2>
+      <p class="sub"><code>emitIssue()</code> never throws back into the caller, and a notifier failure is only logged. Slack and mail are dummy functions for now. To go live, replace the bodies of <code>sendSlack</code> and <code>sendMail</code>.</p>
+      <div class="figure"><pre class="mermaid">{{M7}}</pre></div>
+    </section>
+
+    <section id="jobs">
+      <h2><span class="n">10</span>Batch jobs</h2>
+      <p class="sub">Each job run holds a lock, runs in its tenant's scope, processes data in chunks and retries on failure. Job handlers must be idempotent. On SIGTERM, the runner stops scheduling and waits for in-flight runs to finish.</p>
+      <div class="figure"><pre class="mermaid">{{M8}}</pre></div>
+    </section>
+
+    <section id="api">
+      <h2><span class="n">11</span>API surface, roles and permissions</h2>
+      <p class="sub">Every path is under <code>/api/v1</code>. Permissions are defined once and resolved on the server, and an unknown role gets none.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Deployment</th><th>Endpoint</th><th>Auth / permission</th><th>Gate</th></tr></thead>
+        <tbody>
+          <tr><td>vendor</td><td><code>GET /tenant/status</code></td><td>public</td><td>—</td></tr>
+          <tr><td>vendor</td><td><code>POST /vendor/register</code></td><td>registration code, rate-limited</td><td>pending only</td></tr>
+          <tr><td>vendor</td><td><code>POST /auth/login</code> · <code>/auth/customer/signup</code></td><td>rate-limited</td><td>active</td></tr>
+          <tr><td>vendor</td><td><code>POST /auth/logout</code> · <code>GET /auth/me</code></td><td>cookie</td><td>active (me)</td></tr>
+          <tr><td>vendor</td><td><code>GET /vendor/me</code></td><td><code>vendor:read</code></td><td>active</td></tr>
+          <tr><td>vendor</td><td><code>GET /users</code> · <code>/users/:id</code></td><td><code>user:read</code></td><td>active</td></tr>
+          <tr><td>vendor</td><td><code>POST /users</code> · <code>PATCH /users/:id</code></td><td><code>user:write</code>; cannot touch the owner or change your own role or status</td><td>active</td></tr>
+          <tr><td>vendor</td><td><code>DELETE /users/:id</code></td><td><code>user:delete</code>; cannot delete the owner or yourself</td><td>active</td></tr>
+          <tr><td>platform</td><td><code>POST /auth/login</code> · <code>/auth/logout</code> · <code>GET /auth/me</code></td><td>admin cookie</td><td>—</td></tr>
+          <tr><td>platform</td><td><code>GET /vendors</code> · <code>/vendors/:id</code></td><td><code>platform:vendor:list</code></td><td>—</td></tr>
+          <tr><td>platform</td><td><code>POST /vendors/:id/approve</code> · <code>/reject</code></td><td><code>platform:vendor:review</code></td><td>vendor pending</td></tr>
+          <tr><td>platform</td><td><code>POST /tenants/:id/suspend</code> · <code>/reactivate</code></td><td><code>platform:tenant:lifecycle</code></td><td>compare-and-set on status</td></tr>
+        </tbody>
+      </table></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Role</th><th>Permissions</th></tr></thead>
+        <tbody>
+          <tr><td>owner</td><td><code>vendor:read</code> <code>user:read</code> <code>user:write</code> <code>user:delete</code></td></tr>
+          <tr><td>manager</td><td><code>vendor:read</code> <code>user:read</code> <code>user:write</code></td></tr>
+          <tr><td>support</td><td><code>vendor:read</code> <code>user:read</code></td></tr>
+          <tr><td>marketing</td><td><code>vendor:read</code></td></tr>
+          <tr><td>customer</td><td>none (own profile through <code>/auth/me</code>)</td></tr>
+          <tr><td>superadmin</td><td>vendor list and review, tenant lifecycle</td></tr>
+          <tr><td>reviewer</td><td>vendor list and review</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="extend">
+      <h2><span class="n">12</span>Adding a tenant feature (e.g. Booking)</h2>
+      <p class="sub">Isolation, the error envelope, alerts and pagination come automatically. You write four small pieces.</p>
+      <ol class="steps">
+        <li><code>models/booking.model.js</code>: add <code>schema.plugin(tenantPlugin)</code> and an index starting with <code>{ tenantId: 1, … }</code>. Store money as integer <code>amountMinor</code> plus <code>currency</code>.</li>
+        <li><code>controller/booking.controller.js</code>: write strict Zod schemas and thin handlers, and use <code>paginate()</code> for the list. Never write a <code>tenantId</code> filter.</li>
+        <li><code>utils/permissions.js</code>: add the permission keys and map them to roles.</li>
+        <li><code>routes/vendor.routes.js</code>: wire each route as <code>authorize(P.X), validate({…}), handler</code>, after <code>requireUser</code>.</li>
+      </ol>
+    </section>
+
+    <footer>Source: the <code>nilesh/</code> folder (Express 5, Mongoose 9, Zod 4, plain JS ESM). This page is generated from <code>nilesh/ARCHITECTURE.md</code>.</footer>
+  </main>
+</div>
